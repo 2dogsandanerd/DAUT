@@ -1,51 +1,29 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+*.pyc
+*.pyo
 *.egg-info/
-.installed.cfg
-*.egg
 
 # Virtual Environment
 venv/
 ENV/
-env/
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
-*~
 
 # OS
 .DS_Store
-Thumbs.db
+
+# Backup files
+*~
+*.bak
 
 # Project specific
 chromadb_data/
-*.tar.gz
-*.zip
 backups/
 *.log
-
-# Test files
-test_project/
-.pytest_cache/
-
-# ChromaDB
-chroma_data/
+*.tar.gz
+*.zip

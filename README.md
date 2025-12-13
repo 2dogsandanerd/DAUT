@@ -61,6 +61,9 @@ python -m src.docs_updater /path/to/project
 ### Generated Documentation Files
 ![Auto-generated markdown documentation](screen4.png)
 
+### Documentation Files Overview
+![Explorer view of generated docs](files.png)
+
 ## 🎯 Use Cases
 
 - **API Documentation** - Auto-generate REST API endpoint docs
