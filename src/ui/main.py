@@ -1,0 +1,362 @@
+import streamlit as st
+import tempfile
+from pathlib import Path
+import json
+from src.core.config_manager import ConfigManager, ProjectConfig
+from src.scanner.universal_scanner import UniversalScanner
+from src.core.project_analyzer import ProjectAnalyzer
+from src.matcher import MatcherEngine
+from src.updater.engine import UpdaterEngine
+from src.models.element import CodeElement, DocElement
+from src.ui.components import display_filter_statistics, display_performance_statistics, create_export_options, display_file_browser, display_filter_management, display_directory_visualization
+from src.ui.chroma_components import display_chroma_collection_management, display_chroma_status
+
+def main():
+    st.set_page_config(page_title="Documentation Auto-Update Tool", layout="wide")
+    st.title("Documentation Auto-Update Tool (DAUT)")
+    
+    # Zustand initialisieren
+    if 'scan_results' not in st.session_state:
+        st.session_state.scan_results = None
+    if 'project_path' not in st.session_state:
+        st.session_state.project_path = ""
+    if 'config' not in st.session_state:
+        st.session_state.config = ConfigManager()
+    if 'chroma_client' not in st.session_state:
+        from src.chroma.client import ChromaDBClient
+        from src.core.service_config import ServiceConfig
+        # Lade Service-Konfiguration
+        service_config = ServiceConfig()
+        st.session_state.chroma_client = ChromaDBClient(
+            host=service_config.chroma_host,
+            port=service_config.chroma_port,
+            timeout=service_config.chroma_timeout
+        )
+    
+    # Sidebar für Konfiguration
+    with st.sidebar:
+        st.header("Konfiguration")
+        
+        # Projekt-Pfad Auswahl mit Dateibrowser
+        st.subheader("Projekt-Pfad Auswahl")
+        project_path = st.text_input("Projekt-Pfad", value=st.session_state.project_path, 
+                                     help="Geben Sie den Pfad zum Projektordner ein oder verwenden Sie den unten stehenden Browser")
+        
+        # File browser button - This is a workaround since Streamlit doesn't have a native directory picker
+        with st.expander("📁 Verzeichnis auswählen"):
+            uploaded_file = st.file_uploader(
+                "Laden Sie eine Datei aus dem Zielverzeichnis hoch (workaround für Verzeichnisauswahl):", 
+                type=None, 
+                accept_multiple_files=False
+            )
+            if uploaded_file is not None:
+                # Get the directory of the uploaded file
+                file_dir = Path(uploaded_file.name).parent.absolute()
+                st.session_state.project_path = str(file_dir)
+                st.success(f"Verzeichnis ausgewählt: {file_dir}")
+        
+        # Button to analyze project
+        if st.button("Projekt analysieren"):
+            if project_path and Path(project_path).exists():
+                if not Path(project_path).is_dir():
+                    st.error("Der angegebene Pfad ist kein Verzeichnis.")
+                else:
+                    analyzer = ProjectAnalyzer(st.session_state.config.get_effective_config())
+                    project_type = analyzer.detect_project_type(project_path)
+                    st.session_state.project_path = project_path
+                    
+                    # Update configuration based on project type
+                    config = st.session_state.config.get_effective_config()
+                    if project_type.startswith('python'):
+                        config.scan_paths = analyzer.get_scan_paths(project_path)
+                    elif project_type.startswith('javascript'):
+                        config.scan_paths = analyzer.get_scan_paths(project_path)
+                    
+                    st.success(f"Projekttyp erkannt: {project_type}")
+                    st.write(f"Scan-Pfade: {config.scan_paths}")
+            else:
+                st.error("Der angegebene Projekt-Pfad existiert nicht.")
+    
+    # Hauptbereich
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.header("Analyse")
+
+        if st.button("Projekt scannen", disabled=not st.session_state.project_path):
+            if Path(st.session_state.project_path).exists():
+                # Initialisiere den Fortschritts-Callback
+                from src.scanner.progress_callback import ScanProgressCallback
+
+                # Erstelle einen Fortschritts-Callback mit Streamlit-Integration
+                progress_callback = ScanProgressCallback()
+
+                def update_progress(current, total, description):
+                    progress_value = current / max(1, total) if total > 0 else 0
+                    progress_bar.progress(progress_value, text=f"{description} ({current}/{total})")
+
+                # Setze die Callback-Funktion
+                progress_callback.set_progress_callback(update_progress)
+
+                # Initialisiere die Fortschrittsanzeige
+                progress_bar = st.progress(0)
+
+                config = st.session_state.config.get_effective_config()
+                scanner = UniversalScanner(config, progress_callback=progress_callback)
+                results = scanner.scan_project(st.session_state.project_path)
+                st.session_state.scan_results = results
+
+                st.success("Scan abgeschlossen!")
+
+                # Entferne die Fortschrittsanzeige nach Abschluss
+                progress_bar.empty()
+
+        if st.session_state.scan_results:
+            st.write(f"**Zusammenfassung:**")
+            summary = st.session_state.scan_results['scan_summary']
+            st.write(f"- Gesamte Dateien gescannt: {summary['total_files_scanned']}")
+            st.write(f"- Code-Elemente gefunden: {summary['code_files']}")
+            st.write(f"- Dokumentations-Elemente gefunden: {summary['doc_files']}")
+
+            # Zeige Filterstatistiken
+            if 'scan_report' in st.session_state.scan_results:
+                with st.expander("Filterstatistiken"):
+                    display_filter_statistics(st.session_state.scan_results['scan_report'])
+
+            # Zeige Performance-Statistiken
+            if 'performance_report' in st.session_state.scan_results:
+                with st.expander("Performance-Statistiken"):
+                    display_performance_statistics(st.session_state.scan_results['performance_report'])
+
+            # Zeige Verzeichnisvisualisierung
+            if st.session_state.scan_results:
+                with st.expander("Verzeichnisstruktur"):
+                    scan_report = st.session_state.scan_results.get('scan_report', {})
+                    display_directory_visualization(st.session_state.project_path, scan_report)
+    
+    with col2:
+        st.header("Ergebnisse")
+        
+        if st.session_state.scan_results:
+            results = st.session_state.scan_results
+            tab1, tab2 = st.tabs(["Code-Elemente", "Dokumentation"])
+            
+            with tab1:
+                if results['code_elements']:
+                    st.write(f"**{len(results['code_elements'])} Code-Elemente gefunden**")
+                    for i, elem in enumerate(results['code_elements'][:10]):  # Erste 10 anzeigen
+                        with st.expander(f"{elem.type.value}: {elem.name} ({elem.file_path})"):
+                            st.write(f"**Signatur:** `{elem.signature}`" if elem.signature else "")
+                            if elem.docstring:
+                                st.write(f"**Docstring:** {elem.docstring[:200]}...")
+                            if elem.api_info:
+                                st.write(f"**API:** {elem.api_info}")
+                
+            with tab2:
+                if results['doc_elements']:
+                    st.write(f"**{len(results['doc_elements'])} Dokumentations-Elemente gefunden**")
+                    for i, elem in enumerate(results['doc_elements'][:10]):  # Erste 10 anzeigen
+                        with st.expander(f"{elem.type.value}: {elem.name}"):
+                            st.write(f"**Inhalt:** {elem.content[:200]}..." if elem.content else "")
+    
+    # Matching und Diskrepanz-Analyse
+    if st.session_state.scan_results:
+        st.header("Diskrepanz-Analyse")
+        if st.button("Diskrepanzen analysieren"):
+            with st.spinner("Diskrepanzen werden analysiert..."):
+                matcher = MatcherEngine()
+                results = st.session_state.scan_results
+                discrepancies = matcher.find_discrepancies(
+                    results['code_elements'],
+                    results['doc_elements']
+                )
+                
+                st.session_state.discrepancies = discrepancies
+                
+                st.write(f"**Gefundene Diskrepanzen:**")
+                st.write(f"- Undokumentierter Code: {len(discrepancies['undocumented_code'])}")
+                st.write(f"- Veraltete Dokumentation: {len(discrepancies['outdated_documentation'])}")
+                st.write(f"- Nicht übereinstimmende Elemente: {len(discrepancies['mismatched_elements'])}")
+        
+        # ChromaDB Aktualisierung
+        st.header("ChromaDB-Aktualisierung")
+        if st.button("ChromaDB aktualisieren"):
+            with st.spinner("ChromaDB wird aktualisiert..."):
+                updater = UpdaterEngine()
+                success = updater.update_chroma_db(
+                    st.session_state.scan_results['code_elements'],
+                    st.session_state.scan_results['doc_elements'],
+                    st.session_state.project_path
+                )
+
+                if success:
+                    st.success("ChromaDB erfolgreich aktualisiert!")
+                else:
+                    st.error("Fehler bei der ChromaDB-Aktualisierung")
+
+        # Dokumentations-Aktualisierung mit KI
+        if st.session_state.get('discrepancies'):
+            st.header("KI-gestützte Dokumentations-Aktualisierung")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                generate_new_docs = st.button("Neue Dokumentation generieren")
+
+            with col2:
+                update_existing_docs = st.button("Bestehende Dokumentation aktualisieren")
+
+            # Dateiausgabe-Verzeichnis
+            # Verwende das Projektverzeichnis als Basis
+            default_output_dir = f"{st.session_state.project_path}/auto_docs"
+            output_dir = st.text_input("Ausgabeverzeichnis für neue Dokumentation", value=default_output_dir)
+
+            if generate_new_docs:
+                with st.spinner("KI-Dokumentation wird generiert..."):
+                    from src.llm.client import OllamaClient
+                    from src.updater.engine import UpdaterEngine
+
+                    # Initialisiere Ollama-Client
+                    ollama_client = OllamaClient()
+
+                    if ollama_client.health_check():
+                        st.info("Verbindung zu Ollama erfolgreich. Starte Dokumentations-Generierung...")
+
+                        updater = UpdaterEngine()
+                        results = updater.generate_documentation_updates(
+                            st.session_state.discrepancies,
+                            ollama_client,
+                            output_dir=output_dir
+                        )
+
+                        # Zeige Ergebnisse
+                        if results['generated_files']:
+                            st.success(f"{len(results['generated_files'])} Dokumentationsdateien erfolgreich generiert:")
+                            for file_path in results['generated_files']:
+                                st.write(f"- {file_path}")
+                        else:
+                            st.info("Keine neuen Dokumentationen generiert.")
+
+                        if results['errors']:
+                            st.error(f"Fehler bei der Generierung: {len(results['errors'])}")
+                            for error in results['errors']:
+                                st.write(f"- {error}")
+
+                        if results['skipped']:
+                            st.warning(f"Übersprungene Elemente: {len(results['skipped'])}")
+                            for skip in results['skipped']:
+                                st.write(f"- {skip}")
+                    else:
+                        st.error("Keine Verbindung zu Ollama möglich. Bitte stellen Sie sicher, dass Ollama läuft und Modelle verfügbar sind.")
+
+            if update_existing_docs:
+                with st.spinner("Bestehende Dokumentation wird aktualisiert..."):
+                    from src.llm.client import OllamaClient
+                    from src.updater.engine import UpdaterEngine
+
+                    # Initialisiere Ollama-Client
+                    ollama_client = OllamaClient()
+
+                    if ollama_client.health_check():
+                        st.info("Verbindung zu Ollama erfolgreich. Starte Dokumentations-Aktualisierung...")
+
+                        updater = UpdaterEngine()
+                        results = updater.update_existing_documentation(
+                            st.session_state.discrepancies,
+                            ollama_client
+                        )
+
+                        # Zeige Ergebnisse
+                        if results['updated_files']:
+                            st.success(f"{len(results['updated_files'])} Dokumentationsdateien erfolgreich aktualisiert:")
+                            for update_info in results['updated_files']:
+                                st.write(f"- {update_info['file']} (Element: {update_info['element']})")
+                        else:
+                            st.info("Keine Dokumentationen aktualisiert.")
+
+                        if results['errors']:
+                            st.error(f"Fehler bei der Aktualisierung: {len(results['errors'])}")
+                            for error in results['errors']:
+                                st.write(f"- {error}")
+
+                        if results['skipped']:
+                            st.warning(f"Übersprungene Elemente: {len(results['skipped'])}")
+                            for skip in results['skipped']:
+                                st.write(f"- {skip}")
+                    else:
+                        st.error("Keine Verbindung zu Ollama möglich. Bitte stellen Sie sicher, dass Ollama läuft und Modelle verfügbar sind.")
+
+        # Integration von KI-Dokumentation in bestehende Projektdateien
+        if st.session_state.get('discrepancies'):
+            st.header("Integration in Projektdateien")
+
+            integrate_docs = st.button("KI-Dokumentation in Projektdateien integrieren")
+
+            if integrate_docs:
+                with st.spinner("KI-Dokumentation wird in Projektdateien integriert..."):
+                    from src.llm.client import OllamaClient
+                    from src.updater.engine import UpdaterEngine
+
+                    # Initialisiere Ollama-Client
+                    ollama_client = OllamaClient()
+
+                    if ollama_client.health_check():
+                        st.info("Verbindung zu Ollama erfolgreich. Starte Dokumentations-Integration...")
+
+                        updater = UpdaterEngine()
+                        results = updater.integrate_documentation_in_files(
+                            st.session_state.discrepancies,
+                            ollama_client,
+                            st.session_state.project_path
+                        )
+
+                        # Zeige Ergebnisse
+                        if results['integrated_elements']:
+                            st.success(f"{len(results['integrated_elements'])} Elemente erfolgreich integriert:")
+                            for integration_info in results['integrated_elements']:
+                                if integration_info.get('new_file'):
+                                    st.write(f"- Neue Datei: {integration_info['file']} (Element: {integration_info['element']})")
+                                else:
+                                    st.write(f"- In bestehende Datei: {integration_info['file']} (Element: {integration_info['element']})")
+                        else:
+                            st.info("Keine Elemente integriert.")
+
+                        if results['errors']:
+                            st.error(f"Fehler bei der Integration: {len(results['errors'])}")
+                            for error in results['errors']:
+                                st.write(f"- {error}")
+
+                        if results['skipped']:
+                            st.warning(f"Übersprungene Elemente: {len(results['skipped'])}")
+                            for skip in results['skipped']:
+                                st.write(f"- {skip}")
+                    else:
+                        st.error("Keine Verbindung zu Ollama möglich. Bitte stellen Sie sicher, dass Ollama läuft und Modelle verfügbar sind.")
+
+    # Filter-Management
+    with st.expander("Filter-Verwaltung"):
+        display_filter_management(st.session_state.config)
+
+    # ChromaDB-Status und -Management
+    with st.expander("ChromaDB-Status und -Verwaltung"):
+        display_chroma_status(chroma_client=st.session_state.chroma_client)
+        display_chroma_collection_management(chroma_client=st.session_state.chroma_client)
+
+    # Export-Funktionalität und erweiterte Optionen
+    if st.session_state.scan_results:
+        # Neue Export-Optionen mit der neuen Komponente
+        create_export_options(
+            st.session_state.scan_results.get('scan_report', {}),
+            st.session_state.scan_results.get('performance_report', {})
+        )
+
+        # Standard-Export
+        st.download_button(
+            label="Ergebnisse exportieren",
+            data=json.dumps(st.session_state.scan_results, indent=2, default=str),
+            file_name="daut_scan_results.json",
+            mime="application/json"
+        )
+
+if __name__ == "__main__":
+    main()

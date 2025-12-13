@@ -1,0 +1,7 @@
+{
+  "ollama_host": "http://localhost:11434",
+  "chroma_host": "localhost",
+  "chroma_port": 8000,
+  "ollama_timeout": 120,
+  "chroma_timeout": 30
+}
