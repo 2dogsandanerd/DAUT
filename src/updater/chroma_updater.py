@@ -53,7 +53,13 @@ class ChromaUpdater:
                         }]
 
                         for emb in embeddings_formatted:
-                            self.chroma_client.add_embeddings(collection_name, emb)
+                            self.chroma_client.add_embeddings(
+                                collection_name=collection_name,
+                                embeddings=emb['embeddings'],
+                                documents=emb['documents'],
+                                metadatas=emb['metadatas'],
+                                ids=emb['ids']
+                            )
 
             print("Aktualisiere ChromaDB mit Dokumentations-Elementen...")
             # Bestimme Collection-Namen basierend auf Projektname
@@ -78,7 +84,13 @@ class ChromaUpdater:
                         }]
 
                         for emb in embeddings_formatted:
-                            self.chroma_client.add_embeddings(collection_name, emb)
+                            self.chroma_client.add_embeddings(
+                                collection_name=collection_name,
+                                embeddings=emb['embeddings'],
+                                documents=emb['documents'],
+                                metadatas=emb['metadatas'],
+                                ids=emb['ids']
+                            )
 
             print("ChromaDB erfolgreich aktualisiert")
             return True

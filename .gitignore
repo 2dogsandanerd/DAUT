@@ -8,6 +8,11 @@ __pycache__/
 # Virtual Environment
 venv/
 ENV/
+# Virtual Environment
+venv/
+ENV/
+.env
+.env.local
 
 # IDE
 .vscode/
@@ -27,3 +32,10 @@ backups/
 *.log
 *.tar.gz
 *.zip
+*.zip
+*.db
+*.sqlite3
+
+# Temporary Scripts
+inspect_*.py
+temp_*.py

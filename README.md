@@ -16,6 +16,7 @@ DAUT scans your codebase, detects undocumented code, and automatically generates
 - 🎯 **Smart File Detection** - Respects .gitignore, skips venv/node_modules automatically
 - 💾 **ChromaDB Integration** - Semantic search and context-aware documentation
 - ⚡ **Resume Support** - Skip already-generated docs, continue where you left off
+- 🔌 **MCP Server** - Expose RAG capabilities to external agents (Claude, Cursor, etc.)
 - 🎨 **Beautiful UI** - Streamlit-based interface + powerful CLI
 
 ## 🚀 Quick Start
@@ -180,6 +181,58 @@ Stop and restart anytime - already generated docs are automatically skipped!
 - **Undocumented Code** - Functions/classes without docs
 - **Outdated Documentation** - Docs that don't match current code
 - **Mismatched Elements** - Signature changes, parameter updates
+
+- **Mismatched Elements** - Signature changes, parameter updates
+
+## 🔌 MCP Server Integration
+
+DAUT includes a **Model Context Protocol (MCP)** server, allowing you to connect external AI agents (like Claude Desktop, Cursor, or other LLMs) directly to your project's knowledge base.
+
+### Features
+- **Secure Access**: Protected via API Key (Bearer Token).
+- **RAG Tools**:
+  - `query_rag(query)`: Semantic search in your code and documentation.
+  - `read_documentation_file(path)`: Read full content of generated docs.
+  - `list_documentation_files()`: List available documentation.
+- **Monitoring**: Live connection tracking via the Web UI.
+
+### 🚀 Usage
+
+**Manual Start:**
+```bash
+# Start the server (Default port: 8001)
+./start_mcp.sh
+```
+
+**Auto-Start (Systemd):**
+Run as a background service that survives reboots:
+```bash
+chmod +x install_service.sh
+sudo ./install_service.sh
+```
+
+### 🔐 Security & Configuration
+
+The server requires an **API Key** for all requests. You **MUST** configure this to secure your data.
+
+**Setting the API Key:**
+1.  Edit `start_mcp.sh` (for manual start) or `daut-mcp.service` (for systemd).
+2.  Change the `MCP_API_KEY` variable:
+    ```bash
+    export MCP_API_KEY="your-secure-password-here"
+    ```
+3.  Restart the server.
+
+**Environment Variables:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_PORT` | `8001` | Port for the MCP SSE endpoint |
+| `MCP_HOST` | `0.0.0.0` | Bind address |
+| `MCP_API_KEY` | `secret-token-123` | **REQUIRED:** Auth token for clients |
+
+**Connect a Client:**
+- **URL**: `http://<your-server-ip>:8001/mcp/sse`
+- **Auth**: Header `Authorization: Bearer <your-key>`
 
 ## 🤝 Contributing
 

@@ -32,7 +32,7 @@ def display_filter_statistics(scan_report: Dict[str, Any]):
             'Anzahl': list(scan_report['file_types'].values())
         }
         df_types = pd.DataFrame(file_types_data)
-        st.bar_chart(df_types.set_index('Typ'), use_container_width=True)
+        st.bar_chart(df_types.set_index('Typ'))
 
     # Dateierweiterungen
     st.subheader("Dateierweiterungen")
@@ -42,7 +42,7 @@ def display_filter_statistics(scan_report: Dict[str, Any]):
             'Anzahl': list(scan_report['file_extensions'].values())
         }
         df_ext = pd.DataFrame(extensions_data).nlargest(15, 'Anzahl')  # Nur Top 15
-        st.bar_chart(df_ext.set_index('Erweiterung'), use_container_width=True)
+        st.bar_chart(df_ext.set_index('Erweiterung'))
 
     # Ausgeschlossene Verzeichnisse
     st.subheader("Ausgeschlossene Verzeichnisse")
@@ -52,7 +52,7 @@ def display_filter_statistics(scan_report: Dict[str, Any]):
             'Anzahl': list(scan_report['excluded_directories'].values())
         }
         df_dirs = pd.DataFrame(excluded_dirs_data).nlargest(10, 'Anzahl')  # Nur Top 10
-        st.bar_chart(df_dirs.set_index('Verzeichnis'), use_container_width=True)
+        st.bar_chart(df_dirs.set_index('Verzeichnis'))
 
     # Dateigrößenstatistiken
     if scan_report.get('file_size_stats'):

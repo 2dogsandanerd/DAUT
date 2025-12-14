@@ -1,0 +1,19 @@
+[Unit]
+Description=DAUT RAG MCP Server
+After=network.target
+
+[Service]
+Type=simple
+User=sk
+WorkingDirectory=/mnt/dev/eingang/doc_updater_app
+ExecStart=/mnt/dev/eingang/doc_updater_app/venv/bin/python /mnt/dev/eingang/doc_updater_app/mcp_entry.py
+Restart=always
+RestartSec=5
+Environment=MCP_PORT=8001
+Environment=MCP_HOST=0.0.0.0
+# IMPORTANT: Change this key!
+Environment=MCP_API_KEY=secret-token-123
+# Environment=ANOTHER_VAR=value
+
+[Install]
+WantedBy=multi-user.target

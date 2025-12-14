@@ -36,7 +36,26 @@ def main():
     
     # Sidebar für Konfiguration
     with st.sidebar:
-        st.header("Konfiguration")
+        # Logo & Titel zuerst
+        st.image("doc_file.png", width=100)
+        st.title("DocUpdater")
+        
+        # Aktuelles Projekt
+        if st.session_state.project_path:
+            st.info(f"📁 **Projekt:**\n`{st.session_state.project_path}`")
+            if st.button("🔄 Neues Projekt wählen"):
+                st.session_state.project_path = ""
+                st.session_state.scan_results = None
+                st.rerun()
+        
+        st.markdown("---")
+        
+        # MCP Status Integration
+        st.subheader("🔌 System Status")
+        from src.ui.mcp_status import display_mcp_status_in_sidebar
+        display_mcp_status_in_sidebar()
+        
+        st.markdown("---")
         
         # Projekt-Pfad Auswahl mit Dateibrowser
         st.subheader("Projekt-Pfad Auswahl")
