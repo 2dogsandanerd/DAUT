@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import requests
 import json
 import time
@@ -43,6 +43,57 @@ class OllamaClient:
                 return None
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
             print(f"Ollama Verbindungsfehler: {e}")
+            return None
+
+    def create_embedding(self, model: str, prompt: str) -> Optional[List[float]]:
+        """Generiert Embeddings für den angegebenen Text"""
+        try:
+            payload = {
+                "model": model,
+                "prompt": prompt
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/embeddings",
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("embedding", [])
+            else:
+                # Fallback für neuere Ollama Versionen (/api/embed)
+                return self._create_embedding_v2(model, prompt)
+                
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as e:
+            print(f"Ollama Embedding Fehler: {e}")
+            return None
+
+    def _create_embedding_v2(self, model: str, prompt: str) -> Optional[List[float]]:
+        """Fallback für neuere Ollama API (/api/embed)"""
+        try:
+            payload = {
+                "model": model,
+                "input": prompt
+            }
+            
+            response = self.session.post(
+                f"{self.base_url}/api/embed",
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                embeddings = result.get("embeddings", [])
+                if embeddings and len(embeddings) > 0:
+                    return embeddings[0]
+            
+            print(f"Ollama API V2 Fehler: {response.status_code} - {response.text}")
+            return None
+        except Exception as e:
+            print(f"Ollama V2 Embedding Fehler: {e}")
             return None
     
     def list_models(self) -> Optional[list]:

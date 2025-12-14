@@ -40,15 +40,11 @@ def display_chroma_collection_management(service_config: ServiceConfig):
                     if st.button("🗑️ Löschen", key=f"del_{col_name}"):
                         try:
                             # Lösche Collection
-                            response = chroma_client.session.delete(
-                                f"{chroma_client.base_url}/api/v2/collections/{col_name}",
-                                timeout=chroma_client.timeout
-                            )
-                            if response.status_code in [200, 204]:
+                            if chroma_client.delete_collection(col_name):
                                 st.success(f"Collection '{col_name}' erfolgreich gelöscht")
                                 st.rerun()
                             else:
-                                st.error(f"Fehler beim Löschen der Collection: {response.status_code}")
+                                st.error(f"Fehler beim Löschen der Collection '{col_name}'")
                         except Exception as e:
                             st.error(f"Fehler beim Löschen der Collection: {e}")
         else:
@@ -152,15 +148,11 @@ def display_chroma_collection_management(service_config: ServiceConfig = None, c
                     if st.button("🗑️ Löschen", key=f"del_{col_name}"):
                         try:
                             # Lösche Collection
-                            response = chroma_client.session.delete(
-                                f"{chroma_client.base_url}/api/v2/collections/{col_name}",
-                                timeout=chroma_client.timeout
-                            )
-                            if response.status_code in [200, 204]:
+                            if chroma_client.delete_collection(col_name):
                                 st.success(f"Collection '{col_name}' erfolgreich gelöscht")
                                 st.rerun()
                             else:
-                                st.error(f"Fehler beim Löschen der Collection: {response.status_code}")
+                                st.error(f"Fehler beim Löschen der Collection '{col_name}'")
                         except Exception as e:
                             st.error(f"Fehler beim Löschen der Collection: {e}")
         else:

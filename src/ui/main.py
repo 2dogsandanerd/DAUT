@@ -10,6 +10,7 @@ from src.updater.engine import UpdaterEngine
 from src.models.element import CodeElement, DocElement
 from src.ui.components import display_filter_statistics, display_performance_statistics, create_export_options, display_file_browser, display_filter_management, display_directory_visualization
 from src.ui.chroma_components import display_chroma_collection_management, display_chroma_status
+from src.llm.client import OllamaClient
 
 def main():
     st.set_page_config(page_title="Documentation Auto-Update Tool", layout="wide")
@@ -213,8 +214,6 @@ def main():
 
             if generate_new_docs:
                 with st.spinner("KI-Dokumentation wird generiert..."):
-                    from src.llm.client import OllamaClient
-                    from src.updater.engine import UpdaterEngine
 
                     # Initialisiere Ollama-Client
                     ollama_client = OllamaClient()
@@ -251,8 +250,6 @@ def main():
 
             if update_existing_docs:
                 with st.spinner("Bestehende Dokumentation wird aktualisiert..."):
-                    from src.llm.client import OllamaClient
-                    from src.updater.engine import UpdaterEngine
 
                     # Initialisiere Ollama-Client
                     ollama_client = OllamaClient()
@@ -294,8 +291,6 @@ def main():
 
             if integrate_docs:
                 with st.spinner("KI-Dokumentation wird in Projektdateien integriert..."):
-                    from src.llm.client import OllamaClient
-                    from src.updater.engine import UpdaterEngine
 
                     # Initialisiere Ollama-Client
                     ollama_client = OllamaClient()

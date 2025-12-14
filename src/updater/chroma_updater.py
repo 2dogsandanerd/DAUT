@@ -11,6 +11,12 @@ class ChromaUpdater:
             port=service_config.chroma_port,
             timeout=service_config.chroma_timeout
         )
+        # Initialize Ollama Client for embeddings
+        # We need check if we can import it, avoiding circular imports if any
+        from src.llm.client import OllamaClient
+        # Default embedding model - can be made configurable
+        self.embedding_model = "nomic-embed-text" 
+        self.ollama_client = OllamaClient(host=service_config.ollama_host if hasattr(service_config, 'ollama_host') else "http://localhost:11434")
 
     def update_chroma_with_elements(self, code_elements: List[CodeElement], 
                                   doc_elements: List[DocElement], 
@@ -110,13 +116,17 @@ class ChromaUpdater:
                 'project_path': project_path
             }
 
-            # In einer vollständigen Implementierung würden hier tatsächliche
-            # Embeddings generiert werden, z.B. über ein Embedding-Modell
-            # Für diesen PoC verwenden wir einen Platzhalter
+            # Embeddings generieren
+            embedding = self.ollama_client.create_embedding(self.embedding_model, content)
+            
+            if not embedding:
+                print(f"Warnung: Konnte kein Embedding generieren für {code_elem.name}. Verwende Placeholder.")
+                embedding = [0.0] * 384
+                
             return {
                 'content': content,
                 'metadata': metadata,
-                'embedding': [0.0] * 384  # Platzhalter für Embedding
+                'embedding': embedding
             }
         except Exception as e:
             print(f"Fehler bei der Erstellung von Embedding-Daten für Code-Element: {e}")
@@ -136,13 +146,17 @@ class ChromaUpdater:
                 'project_path': project_path
             }
 
-            # In einer vollständigen Implementierung würden hier tatsächliche
-            # Embeddings generiert werden
-            # Für diesen PoC verwenden wir einen Platzhalter
+            # Embeddings generieren
+            embedding = self.ollama_client.create_embedding(self.embedding_model, content)
+            
+            if not embedding:
+                print(f"Warnung: Konnte kein Embedding generieren für {doc_elem.name}. Verwende Placeholder.")
+                embedding = [0.0] * 384
+
             return {
                 'content': content,
                 'metadata': metadata,
-                'embedding': [0.0] * 384  # Platzhalter für Embedding
+                'embedding': embedding
             }
         except Exception as e:
             print(f"Fehler bei der Erstellung von Embedding-Daten für Dokumentations-Element: {e}")
