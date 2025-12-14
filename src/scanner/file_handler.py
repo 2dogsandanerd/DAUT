@@ -38,7 +38,9 @@ class FileHandler:
                     continue
 
                 # Prüfen, ob Datei in Gitignore ist (verwendet den GitIgnoreHandler)
-                if self.gitignore_handler and self.gitignore_handler.is_ignored(file_path):
+                # Ausnahme: auto_docs und docs Verzeichnisse immer scannen, auch wenn gitignored
+                is_doc_dir = 'auto_docs' in str(file_path).split(os.sep) or 'docs' in str(file_path).split(os.sep)
+                if not is_doc_dir and self.gitignore_handler and self.gitignore_handler.is_ignored(file_path):
                     continue
 
                 # Datei-Filter anwenden

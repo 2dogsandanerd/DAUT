@@ -89,7 +89,7 @@ class ProjectAnalyzer:
                     scan_paths.append(str(full_path))
         elif project_type in ['python', 'python_fastapi', 'python_flask']:
             # Typische Python-Pfade
-            python_paths = ['.', 'src', 'lib', 'app', 'backend', 'api']
+            python_paths = ['.', 'src', 'lib', 'app', 'backend', 'api', 'docs', 'auto_docs']
             for path in python_paths:
                 full_path = project_path / path
                 if full_path.exists():

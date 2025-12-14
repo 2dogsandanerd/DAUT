@@ -39,3 +39,4 @@ class DocElement(BaseModel):
     file_path: Optional[str] = None
     project_path: Optional[str] = None
     references: Optional[List[str]] = None  # Verweise auf Code-Elemente
+    format: Optional[str] = "md"  # Dateiformat (z.B. md, rst, txt)

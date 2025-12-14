@@ -39,14 +39,14 @@ class UpdaterEngine:
             print(f"Fehler beim Aktualisieren der Datei {file_path}: {e}")
             return False
     
-    def generate_documentation_for_code(self, code_element: CodeElement, llm_client: Any) -> Optional[str]:
+    def generate_documentation_for_code(self, code_element: CodeElement, llm_client: Any, project_root: str = None) -> Optional[str]:
         """Generiert Dokumentation für ein Code-Element mit Hilfe des LLM"""
         if not llm_client:
             print("Kein LLM-Client zur Verfügung - kann keine Dokumentation generieren")
             return None
 
         # Hole relevanten Kontext aus ChromaDB
-        context_info = self._get_context_from_chroma(code_element)
+        context_info = self._get_context_from_chroma(code_element, project_root)
 
         # Erstelle einen verbesserten Prompt für die Dokumentation
         prompt = f"""
@@ -96,7 +96,7 @@ class UpdaterEngine:
             print(f"Fehler bei der Generierung der Dokumentation: {e}")
             return None
 
-    def _get_context_from_chroma(self, code_element: CodeElement) -> str:
+    def _get_context_from_chroma(self, code_element: CodeElement, project_root: str = None) -> str:
         """Holt relevanten Kontext aus ChromaDB basierend auf dem Code-Element"""
         try:
             # Verwende den ChromaUpdater für die semantische Suche
@@ -119,10 +119,14 @@ class UpdaterEngine:
             search_query = f"{code_element.name} {code_element.signature or ''} {code_element.type.value if code_element.type else ''}"
 
             # Suche in der entsprechenden Collection (basierend auf Projekt-Pfad)
-            # In einer vollständigen Implementierung würde dies die richtige Collection wählen
-            # basierend auf dem Projekt-Pfad des Code-Elements
-            project_name = Path(code_element.project_path).name if code_element.project_path else "default"
+            # FIX: Verwende project_root falls verfügbar, sonst fallback auf code_element.project_path
+            # Dies verhindert Fragmentierung in viele kleine Collections
+            base_path = project_root if project_root else code_element.project_path
+            project_name = Path(base_path).name if base_path else "default"
             collection_name = f"{project_name}_code"
+            
+            # Debug output
+            print(f"🔍 Suche Kontext in Collection: {collection_name}")
 
             # Führe die Abfrage durch (auto_create=True erstellt die Collection, falls sie nicht existiert)
             results = chroma_client.query_collection(
@@ -152,7 +156,7 @@ class UpdaterEngine:
         """
         return self.chroma_updater.update_chroma_with_elements(code_elements, doc_elements, project_path)
 
-    def generate_documentation_updates(self, discrepancies: Dict[str, Any], llm_client: Any, output_dir: str = "./docs") -> Dict[str, Any]:
+    def generate_documentation_updates(self, discrepancies: Dict[str, Any], llm_client: Any, output_dir: str = "./docs", project_path: str = None) -> Dict[str, Any]:
         """
         Generiert Dokumentations-Updates basierend auf Diskrepanzen und speichert sie in Dateien
 
@@ -160,6 +164,7 @@ class UpdaterEngine:
             discrepancies: Dictionary mit Diskrepanzen (von matcher.py)
             llm_client: Instanz des LLM-Clients
             output_dir: Verzeichnis für die generierten Dokumentationsdateien
+            project_path: Pfad zum Root-Projekt (für Kontext-Lookup)
 
         Returns:
             Dictionary mit Ergebnissen der Generierung
@@ -208,7 +213,7 @@ class UpdaterEngine:
                     continue
 
                 # Generiere Dokumentation für das Code-Element
-                generated_doc = self.generate_documentation_for_code(code_element, llm_client)
+                generated_doc = self.generate_documentation_for_code(code_element, llm_client, project_path)
 
                 if generated_doc:
                     # Speichere die generierte Dokumentation
@@ -238,13 +243,14 @@ class UpdaterEngine:
 
         return results
 
-    def update_existing_documentation(self, discrepancies: Dict[str, Any], llm_client: Any) -> Dict[str, Any]:
+    def update_existing_documentation(self, discrepancies: Dict[str, Any], llm_client: Any, project_path: str = None) -> Dict[str, Any]:
         """
         Aktualisiert bestehende Dokumentationsdateien basierend auf Diskrepanzen
 
         Args:
             discrepancies: Dictionary mit Diskrepanzen (von matcher.py)
             llm_client: Instanz des LLM-Clients
+            project_path: Pfad zum Root-Projekt (für Kontext-Lookup)
 
         Returns:
             Dictionary mit Ergebnissen der Aktualisierung
@@ -263,7 +269,7 @@ class UpdaterEngine:
 
                 if code_element and doc_element:
                     # Generiere verbesserte Dokumentation basierend auf aktuellem Code
-                    improved_doc = self.generate_documentation_for_code(code_element, llm_client)
+                    improved_doc = self.generate_documentation_for_code(code_element, llm_client, project_path)
 
                     if improved_doc:
                         # Erstelle Backup der originalen Datei

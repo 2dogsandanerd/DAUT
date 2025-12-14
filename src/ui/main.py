@@ -244,7 +244,8 @@ def main():
                         results = updater.generate_documentation_updates(
                             st.session_state.discrepancies,
                             ollama_client,
-                            output_dir=output_dir
+                            output_dir=output_dir,
+                            project_path=st.session_state.project_path # NEW: Pass unified project path
                         )
 
                         # Zeige Ergebnisse
@@ -279,7 +280,8 @@ def main():
                         updater = UpdaterEngine()
                         results = updater.update_existing_documentation(
                             st.session_state.discrepancies,
-                            ollama_client
+                            ollama_client,
+                            project_path=st.session_state.project_path # NEW: Pass unified project path
                         )
 
                         # Zeige Ergebnisse

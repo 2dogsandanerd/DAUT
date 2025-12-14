@@ -19,6 +19,19 @@ DAUT scans your codebase, detects undocumented code, and automatically generates
 - 🔌 **MCP Server** - Expose RAG capabilities to external agents (Claude, Cursor, etc.)
 - 🎨 **Beautiful UI** - Streamlit-based interface + powerful CLI
 
+## 🧠 RAG Strategy (Under the Hood)
+
+DAUT uses a sophisticated **structural indexing approach** to ensure high-quality answers:
+
+1.  **Unified Knowledge Base** 🌐
+    All files, regardless of their folder depth, are indexed into a single project-wide collection (e.g., `rag_enterprise_core_code`). This prevents context fragmentation and ensures the AI sees the "Big Picture".
+
+2.  **Full-Content Embedding** 📖
+    Unlike simple splitters that chop text into arbitrary chunks, DAUT indexes the **full content** of your documentation files. This preserves the complete context of tutorials and guides.
+
+3.  **Structure-Aware Code Indexing** 🏗️
+    Code is not just text. We parse the AST (Abstract Syntax Tree) to treat Classes, Functions, and API Endpoints as distinct semantic entities.
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -74,6 +87,14 @@ python -m src.docs_updater /path/to/project
 - **Documentation Audits** - Find and fix documentation gaps
 - **Legacy Code** - Document undocumented legacy systems
 - **Continuous Docs** - Keep docs in sync with code changes
+
+## 💡 Best Practices
+
+### Ensure High-Quality RAG Results
+To avoid "diluting" the AI's knowledge base with outdated information:
+*   **Prioritize `auto_docs`**: These files are generated directly from the current codebase and represent the "source of truth".
+*   **Exclude Legacy Docs**: If you have an old `docs/` folder with manual (potentially outdated) documentation, consider adding `docs/` to the **Exclude Patterns** in the **Filter Management** sidebar.
+*   **Why?** If the RAG system indexes both current code (via `auto_docs`) and outdated manuals (via `docs/`), it might retrieve conflicting information. By filtering out legacy docs, you ensure a "Pure Code-Truth" knowledge base.
 
 ## 📋 Example Output
 

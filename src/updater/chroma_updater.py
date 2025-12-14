@@ -148,7 +148,10 @@ class ChromaUpdater:
         """Erstellt Embedding-Daten für ein Dokumentations-Element"""
         try:
             # Erstelle Inhalt für das Dokumentations-Element
-            content = f"Name: {doc_elem.name}\nTyp: {doc_elem.type.value}\nInhalt: {doc_elem.content}"
+            # Bevorzuge full_content für das Embedding, falls verfügbar (damit nicht nur die Vorschau embeddet wird)
+            text_to_embed = doc_elem.full_content if doc_elem.full_content else doc_elem.content
+            
+            content = f"Name: {doc_elem.name}\nTyp: {doc_elem.type.value}\nInhalt: {text_to_embed}"
 
             metadata = {
                 'name': doc_elem.name,
