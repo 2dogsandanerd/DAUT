@@ -3,5 +3,7 @@
   "chroma_host": "localhost",
   "chroma_port": 8000,
   "ollama_timeout": 120,
-  "chroma_timeout": 30
+  "chroma_timeout": 30,
+  "embedding_model": "nomic-embed-text",
+  "llm_model": "llama3"
 }

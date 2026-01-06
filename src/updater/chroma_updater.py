@@ -14,8 +14,7 @@ class ChromaUpdater:
         # Initialize Ollama Client for embeddings
         # We need check if we can import it, avoiding circular imports if any
         from src.llm.client import OllamaClient
-        # Default embedding model - can be made configurable
-        self.embedding_model = "nomic-embed-text" 
+        self.embedding_model = service_config.embedding_model
         self.ollama_client = OllamaClient(host=service_config.ollama_host if hasattr(service_config, 'ollama_host') else "http://localhost:11434")
 
     def update_chroma_with_elements(self, code_elements: List[CodeElement], 

@@ -11,6 +11,7 @@ from src.models.element import CodeElement, DocElement
 from src.ui.components import display_filter_statistics, display_performance_statistics, create_export_options, display_file_browser, display_filter_management, display_directory_visualization
 from src.ui.chroma_components import display_chroma_collection_management, display_chroma_status
 from src.llm.client import OllamaClient
+from src.core.coverage_checker import CoverageChecker
 
 def main():
     st.set_page_config(page_title="Documentation Auto-Update Tool", layout="wide")
@@ -81,17 +82,22 @@ def main():
                 if not Path(project_path).is_dir():
                     st.error("Der angegebene Pfad ist kein Verzeichnis.")
                 else:
+                    # Aktualisiere die Konfiguration basierend auf dem Projektverzeichnis
+                    st.session_state.config.config.update_for_project(project_path)
+
                     analyzer = ProjectAnalyzer(st.session_state.config.get_effective_config())
                     project_type = analyzer.detect_project_type(project_path)
                     st.session_state.project_path = project_path
-                    
-                    # Update configuration based on project type
+
+                    # Update configuration based on project type if needed
                     config = st.session_state.config.get_effective_config()
                     if project_type.startswith('python'):
-                        config.scan_paths = analyzer.get_scan_paths(project_path)
+                        if not any(path in config.scan_paths for path in ['src', 'lib', 'app']):
+                            config.scan_paths = analyzer.get_scan_paths(project_path)
                     elif project_type.startswith('javascript'):
-                        config.scan_paths = analyzer.get_scan_paths(project_path)
-                    
+                        if not any(path in config.scan_paths for path in ['src', 'lib', 'app']):
+                            config.scan_paths = analyzer.get_scan_paths(project_path)
+
                     st.success(f"Projekttyp erkannt: {project_type}")
                     st.write(f"Scan-Pfade: {config.scan_paths}")
             else:
@@ -232,6 +238,28 @@ def main():
             output_dir = st.text_input("Ausgabeverzeichnis für neue Dokumentation", value=default_output_dir)
 
             if generate_new_docs:
+                # PRE-CHECK: Coverage vor Generierung
+                st.subheader("📊 Coverage-Check (vor Generierung)")
+                checker = CoverageChecker(st.session_state.project_path)
+                pre_report = checker.check_coverage()
+
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Klassen", f"{pre_report.documented_classes}/{pre_report.total_classes}")
+                with col2:
+                    st.metric("Fehlend", len(pre_report.missing_classes), delta=f"-{len(pre_report.missing_classes)}", delta_color="inverse")
+                with col3:
+                    st.metric("Coverage", f"{pre_report.coverage_percentage:.1f}%")
+
+                if pre_report.missing_classes:
+                    with st.expander(f"❌ {len(pre_report.missing_classes)} fehlende Klassen anzeigen"):
+                        for cls in pre_report.missing_classes[:30]:
+                            st.write(f"- {cls}")
+                        if len(pre_report.missing_classes) > 30:
+                            st.write(f"... und {len(pre_report.missing_classes) - 30} weitere")
+
+                st.divider()
+
                 with st.spinner("KI-Dokumentation wird generiert..."):
 
                     # Initialisiere Ollama-Client
@@ -265,6 +293,32 @@ def main():
                             st.warning(f"Übersprungene Elemente: {len(results['skipped'])}")
                             for skip in results['skipped']:
                                 st.write(f"- {skip}")
+
+                        # POST-CHECK: Coverage nach Generierung
+                        st.divider()
+                        st.subheader("📊 Coverage-Check (nach Generierung)")
+                        post_report = checker.check_coverage()
+
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Klassen", f"{post_report.documented_classes}/{post_report.total_classes}",
+                                     delta=f"+{post_report.documented_classes - pre_report.documented_classes}")
+                        with col2:
+                            st.metric("Noch fehlend", len(post_report.missing_classes),
+                                     delta=f"{len(post_report.missing_classes) - len(pre_report.missing_classes)}")
+                        with col3:
+                            st.metric("Coverage", f"{post_report.coverage_percentage:.1f}%",
+                                     delta=f"+{post_report.coverage_percentage - pre_report.coverage_percentage:.1f}%")
+
+                        if post_report.is_complete():
+                            st.success("✅ 100% COVERAGE ERREICHT!")
+                        else:
+                            st.warning(f"⚠️ Noch {len(post_report.missing_classes)} Klassen fehlen. Bitte erneut generieren.")
+                            if post_report.missing_classes:
+                                with st.expander("Verbleibende fehlende Klassen"):
+                                    for cls in post_report.missing_classes:
+                                        st.write(f"- {cls}")
+
                     else:
                         st.error("Keine Verbindung zu Ollama möglich. Bitte stellen Sie sicher, dass Ollama läuft und Modelle verfügbar sind.")
 

@@ -103,16 +103,82 @@ class ProjectConfig(BaseModel):
         "javascript_express": ["express"]
     }
     
+    def update_for_project(self, project_path: str) -> None:
+        """Aktualisiert die Konfiguration basierend auf dem Projektverzeichnis"""
+        project_dir = Path(project_path)
+
+        # Framework-Detection basierend auf Dateien im Projekt
+        detected_frameworks = []
+
+        # Überprüfe auf spezifische Dateien
+        if (project_dir / "requirements.txt").exists() or (project_dir / "pyproject.toml").exists() or (project_dir / "setup.py").exists():
+            detected_frameworks.append("python")
+
+        if (project_dir / "package.json").exists():
+            detected_frameworks.append("javascript")
+
+        # Überprüfe requirements.txt oder pyproject.toml auf spezifische Frameworks
+        req_file = project_dir / "requirements.txt"
+        pyproject_file = project_dir / "pyproject.toml"
+
+        if req_file.exists():
+            content = req_file.read_text(encoding='utf-8', errors='ignore')
+            if "fastapi" in content.lower():
+                detected_frameworks.append("python_fastapi")
+            elif "flask" in content.lower():
+                detected_frameworks.append("python_flask")
+            elif "django" in content.lower():
+                detected_frameworks.append("python_django")
+
+        if pyproject_file.exists():
+            content = pyproject_file.read_text(encoding='utf-8', errors='ignore')
+            if "fastapi" in content.lower():
+                detected_frameworks.append("python_fastapi")
+            elif "flask" in content.lower():
+                detected_frameworks.append("python_flask")
+            elif "django" in content.lower():
+                detected_frameworks.append("python_django")
+
+        # Aktualisiere die Konfiguration basierend auf erkannten Frameworks
+        if "python_fastapi" in detected_frameworks or "python_flask" in detected_frameworks:
+            # Für Python-Webframeworks, füge API-spezifische Dateiendungen hinzu
+            if "*.py" in self.include_patterns and "*.api.py" not in self.include_patterns:
+                self.include_patterns.extend(["*.api.py", "*.router.py", "*.endpoint.py"])
+
+        if "javascript" in detected_frameworks:
+            # Für JavaScript-Projekte, füge typische Dateiendungen hinzu
+            if "*.js" in self.include_patterns and "*.jsx" in self.include_patterns:
+                self.include_patterns.extend(["*.cjs", "*.mjs", "*.ts", "*.tsx"])
+
+        # Setze den Projekttyp basierend auf den Erkennungen
+        if detected_frameworks:
+            self.project_type = "_".join(detected_frameworks)
+
+        # Setze intelligente Pfade basierend auf Projekttyp
+        if "python" in detected_frameworks:
+            if "." in self.scan_paths or ["."] in self.scan_paths:
+                # Ersetze generischen Pfad durch spezifischere Pfade, wenn vorhanden
+                potential_paths = ["src", "lib", "app", project_dir.name]
+                for path in potential_paths:
+                    if (project_dir / path).is_dir():
+                        if path not in self.scan_paths:
+                            self.scan_paths.append(path)
+                        break
+
     class Config:
         arbitrary_types_allowed = True
 
 class ConfigManager:
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, project_path: Optional[str] = None):
         if config_path and Path(config_path).exists():
             self.config = self.load_config(config_path)
         else:
             self.config = ProjectConfig()
-    
+
+        # Wenn ein Projektverzeichnis angegeben ist, aktualisiere die Konfiguration
+        if project_path:
+            self.config.update_for_project(project_path)
+
     def load_config(self, config_path: str) -> ProjectConfig:
         """Lädt Konfiguration aus Datei (JSON oder YAML)"""
         path = Path(config_path)
@@ -124,7 +190,7 @@ class ConfigManager:
                 data = yaml.safe_load(f)
         else:
             raise ValueError(f"Unsupported config file format: {path.suffix}")
-        
+
         return ProjectConfig(**data)
     
     def save_config(self, config_path: str):
