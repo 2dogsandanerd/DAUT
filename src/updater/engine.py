@@ -3,6 +3,8 @@ from typing import List, Dict, Any, Optional
 from src.models.element import CodeElement, DocElement
 from .chroma_updater import ChromaUpdater
 from src.core.service_config import ServiceConfig
+from src.quality.quality_manager import DocumentationQualityManager
+from src.utils.name_generator import UniqueNameGenerator
 import shutil
 import tempfile
 import os
@@ -14,6 +16,8 @@ class UpdaterEngine:
         # Lade oder erstelle die Service-Konfiguration
         self.service_config = ServiceConfig.load_from_file(config_path)
         self.chroma_updater = ChromaUpdater(self.service_config)
+        self.quality_manager = DocumentationQualityManager()
+        self.name_generator = UniqueNameGenerator()
     
     def backup_file(self, file_path: str) -> str:
         """Erstellt ein Backup der Datei und gibt den Pfad zum Backup zurück"""
@@ -80,7 +84,7 @@ class UpdaterEngine:
         [Beschreibung des Rückgabewerts und dessen Typ]
 
         ### Beispiel
-        [Ein oder zwei klare Beispiele zur Verwendung, wenn möglich]
+        [Ein oder zwei klare Beisele zur Verwendung, wenn möglich]
 
         ### Weitere Informationen
         [Zusätzliche relevante Informationen wie Ausnahmen, Seiteneffekte, etc.]
@@ -88,9 +92,9 @@ class UpdaterEngine:
         Beachte den Stil und die Formatierung des bestehenden Projekts. Verwende korrektes Markdown und schreibe verständlich für andere Entwickler.
         """
 
-        # Generiere die Dokumentation
+        # Generiere die Dokumentation mit dem konfigurierten LLM-Modell
         try:
-            generated_doc = llm_client.generate("llama3", prompt)
+            generated_doc = llm_client.generate(self.service_config.llm_model, prompt)
             return generated_doc
         except Exception as e:
             print(f"Fehler bei der Generierung der Dokumentation: {e}")
@@ -191,19 +195,12 @@ class UpdaterEngine:
                 # Fortschrittsanzeige
                 print(f"[{idx}/{total_items}] Verarbeite: {code_element.name} ({code_element.type.value if code_element.type else 'unknown'})")
 
-                # Erstelle Dateinamen ZUERST (um zu prüfen, ob er existiert)
-                safe_name = "".join(c for c in code_element.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                safe_name = safe_name.replace(' ', '_').lower()
-
-                # Dateiendung basierend auf Typ
-                if code_element.type and code_element.type.value == 'api_endpoint':
-                    file_extension = '.api.md'
-                elif code_element.type and code_element.type.value == 'class':
-                    file_extension = '.class.md'
-                else:
-                    file_extension = '.md'
-
-                filename = f"{safe_name}{file_extension}"
+                # Verwende den UniqueNameGenerator für eindeutige Dateinamen
+                filename = self.name_generator.generate_unique_filename_from_element(
+                    element_name=code_element.name,
+                    element_type=code_element.type.value if code_element.type else 'unknown',
+                    source_file_path=code_element.file_path or str(output_path)
+                )
                 filepath = output_path / filename
 
                 # SKIP: Wenn Datei bereits existiert
@@ -216,14 +213,37 @@ class UpdaterEngine:
                 generated_doc = self.generate_documentation_for_code(code_element, llm_client, project_path)
 
                 if generated_doc:
-                    # Speichere die generierte Dokumentation
-                    with open(filepath, 'w', encoding='utf-8') as f:
-                        f.write(generated_doc)
+                    # Bewertung der Dokumentationsqualität
+                    quality_score = self.quality_manager.evaluate_single_documentation(generated_doc, code_element)
 
-                    results['generated_files'].append(str(filepath))
-                    print(f"    ✅ Gespeichert: {filepath.name}")
+                    # Nur speichern, wenn die Qualität über der Schwelle liegt
+                    if quality_score.overall_score >= self.quality_manager.quality_threshold:
+                        # Speichere die generierte Dokumentation
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write(generated_doc)
+
+                        results['generated_files'].append({
+                            'path': str(filepath),
+                            'quality_score': quality_score.overall_score,
+                            'element_name': code_element.name
+                        })
+                        print(f"    ✅ Gespeichert (Qualität: {quality_score.overall_score:.2f}): {filepath.name}")
+                    else:
+                        results['skipped'].append({
+                            'element_name': code_element.name,
+                            'reason': f"Qualität unter Schwelle: {quality_score.overall_score:.2f} < {self.quality_manager.quality_threshold}",
+                            'quality_score': quality_score.overall_score
+                        })
+                        print(f"    ⚠️  Übersprungen (Qualität: {quality_score.overall_score:.2f} < {self.quality_manager.quality_threshold}): {code_element.name}")
+
+                        # Gebe Feedback für Verbesserungen aus
+                        if quality_score.feedback:
+                            print(f"       Feedback: {quality_score.feedback[0] if quality_score.feedback else 'Kein Feedback'}")
                 else:
-                    results['skipped'].append(f"Keine Dokumentation generiert für {code_element.name}")
+                    results['skipped'].append({
+                        'element_name': code_element.name,
+                        'reason': "Keine Dokumentation generiert"
+                    })
                     print(f"    ⚠️  Übersprungen: {code_element.name}")
 
             except Exception as e:
@@ -239,6 +259,12 @@ class UpdaterEngine:
         print(f"   • Generiert:     {len(results['generated_files'])} Dateien")
         print(f"   • Übersprungen:  {len(results['skipped'])} Elemente")
         print(f"   • Fehler:        {len(results['errors'])} Fehler")
+
+        # Detaillierte Qualitätssummary, falls Dokumentationen generiert wurden
+        if results['generated_files']:
+            total_quality = sum(file.get('quality_score', 0) for file in results['generated_files'])
+            avg_quality = total_quality / len(results['generated_files']) if results['generated_files'] else 0
+            print(f"   • Durchschn. Qualität: {avg_quality:.2f}")
         print(f"{'='*60}\n")
 
         return results

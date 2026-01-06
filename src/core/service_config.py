@@ -9,6 +9,8 @@ class ServiceConfig(BaseModel):
     chroma_port: int = 8000
     ollama_timeout: int = 120
     chroma_timeout: int = 30
+    embedding_model: str = "nomic-embed-text"
+    llm_model: str = "llama3"
     
     def save_to_file(self, file_path: str):
         """Speichert die Konfiguration in eine Datei"""

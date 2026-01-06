@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Union
 from ..models.element import CodeElement, ElementType
 from ..core.config_manager import ProjectConfig
+from .go_rust_parsers import GoParser, RustParser
 
 class CodeScanner:
     def __init__(self, config: ProjectConfig):
@@ -12,17 +13,21 @@ class CodeScanner:
     def scan_file(self, file_path: Path) -> List[CodeElement]:
         """Scannt eine Code-Datei und extrahiert alle relevanten Elemente"""
         elements = []
-        
+
         if file_path.suffix.lower() == '.py':
             elements = self._scan_python_file(file_path)
         elif file_path.suffix.lower() in ['.js', '.jsx', '.ts', '.tsx']:
             elements = self._scan_javascript_file(file_path)
-        
+        elif file_path.suffix.lower() == '.go':
+            elements = self._scan_go_file(file_path)
+        elif file_path.suffix.lower() == '.rs':
+            elements = self._scan_rust_file(file_path)
+
         # Hinzufügen von Dateiinformationen zu jedem Element
         for element in elements:
             element.file_path = str(file_path)
             element.project_path = str(file_path.parent)
-        
+
         return elements
     
     def _scan_python_file(self, file_path: Path) -> List[CodeElement]:
@@ -55,7 +60,51 @@ class CodeScanner:
                 elements.append(element)
         
         return elements
-    
+
+    def _scan_go_file(self, file_path: Path) -> List[CodeElement]:
+        """Scannt eine Go-Datei"""
+        go_parser = GoParser()
+        go_elements = go_parser.parse_file(file_path)
+
+        code_elements = []
+        for elem in go_elements:
+            code_element = CodeElement(
+                name=elem['name'],
+                type=ElementType.FUNCTION if elem['type'] == 'function' else
+                     ElementType.CLASS if elem['type'] in ['struct', 'interface'] else
+                     ElementType.FUNCTION,
+                signature=elem.get('signature', ''),
+                line_number=elem.get('line_number'),
+                file_path=elem.get('file_path'),
+                code_snippet=elem.get('code_snippet', ''),
+                docstring=''  # Go-Dokumentation könnte hier extrahiert werden
+            )
+            code_elements.append(code_element)
+
+        return code_elements
+
+    def _scan_rust_file(self, file_path: Path) -> List[CodeElement]:
+        """Scannt eine Rust-Datei"""
+        rust_parser = RustParser()
+        rust_elements = rust_parser.parse_file(file_path)
+
+        code_elements = []
+        for elem in rust_elements:
+            code_element = CodeElement(
+                name=elem['name'],
+                type=ElementType.FUNCTION if elem['type'] == 'function' else
+                     ElementType.CLASS if elem['type'] in ['struct', 'enum', 'trait'] else
+                     ElementType.FUNCTION,
+                signature=elem.get('signature', ''),
+                line_number=elem.get('line_number'),
+                file_path=elem.get('file_path'),
+                code_snippet=elem.get('code_snippet', ''),
+                docstring=''  # Rust-Dokumentation könnte hier extrahiert werden
+            )
+            code_elements.append(code_element)
+
+        return code_elements
+
     def _extract_function_info(self, node: ast.AST, file_path: Path, content: str) -> CodeElement:
         """Extrahiert Informationen aus einer Python-Funktion"""
         # Parameter extrahieren

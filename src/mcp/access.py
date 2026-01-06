@@ -27,7 +27,7 @@ class RAGAccess:
             ollama_host = self.config.ollama_host
             
         self.ollama_client = OllamaClient(host=ollama_host)
-        self.embedding_model = "nomic-embed-text"
+        self.embedding_model = self.config.embedding_model
 
     def health_check(self) -> Dict[str, bool]:
         """Check connection to backend services"""

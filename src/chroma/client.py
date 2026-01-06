@@ -1,6 +1,8 @@
-from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
+from typing import List, Dict, Optional
+import requests
+
 
 class ChromaDBClient:
     def __init__(self, host: str = "localhost", port: int = 8000, timeout: int = 30):
@@ -10,232 +12,155 @@ class ChromaDBClient:
         Args:
             host: Hostname des ChromaDB Servers
             port: Port des ChromaDB Servers
-            timeout: Timeout für Requests (wird derzeit nicht verwendet)
+            timeout: Timeout für Verbindungen
         """
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.base_url = f"http://{host}:{port}/api/v2"
 
-        # Verwende den offiziellen ChromaDB HttpClient
         try:
-            self.client = chromadb.HttpClient(host=host, port=port)
+            # Versuche, die Verbindung über HTTP zu testen
+            response = requests.get(f"{self.base_url}/heartbeat", timeout=timeout)
+            if response.status_code == 200:
+                # Verwende den offiziellen ChromaDB HttpClient
+                self.client = chromadb.HttpClient(
+                    host=host,
+                    port=port,
+                    settings=Settings(
+                        chroma_server_host=host,
+                        chroma_server_http_port=port,
+                        chroma_server_ssl_enabled=False
+                    )
+                )
+            else:
+                raise Exception(f"Unerwarteter Statuscode: {response.status_code}")
         except Exception as e:
             print(f"Warnung: Konnte nicht zum ChromaDB Server verbinden: {e}")
             self.client = None
 
-    def health_check(self) -> bool:
+    def is_connected(self) -> bool:
         """Prüft, ob der ChromaDB-Server erreichbar ist"""
-        if not self.client:
+        if self.client is None:
             return False
         try:
-            # Versuche, Collections aufzulisten als Health-Check
             self.client.heartbeat()
             return True
-        except Exception as e:
-            print(f"Health check fehlgeschlagen: {e}")
+        except:
             return False
 
-    def collection_exists(self, collection_name: str) -> bool:
-        """Prüft, ob eine Collection bereits existiert"""
-        if not self.client:
+    def health_check(self) -> bool:
+        """Überprüft den Gesundheitsstatus des ChromaDB-Servers"""
+        if self.client is None:
             return False
         try:
-            collections = self.client.list_collections()
-            return any(col.name == collection_name for col in collections)
-        except Exception as e:
-            print(f"Fehler beim Prüfen der Collection: {e}")
+            # Nutze die direkte HTTP-Anfrage anstatt des Clients
+            response = requests.get(f"{self.base_url}/heartbeat", timeout=self.timeout)
+            return response.status_code == 200
+        except:
             return False
 
-    def create_collection(self, collection_name: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Erstellt eine neue Collection
-
-        Args:
-            collection_name: Name der Collection
-            metadata: Optionale Metadaten für die Collection
-
-        Returns:
-            True wenn erfolgreich, False sonst
-        """
-        if not self.client:
+    def get_or_create_collection(self, collection_name: str):
+        """Holt oder erstellt eine Collection"""
+        if self.client is None:
             print("ChromaDB Client nicht initialisiert")
-            return False
-
-        # Prüfe zuerst, ob die Collection bereits existiert
-        if self.collection_exists(collection_name):
-            print(f"Collection '{collection_name}' existiert bereits")
-            return True
-
+            return None
         try:
-            # Standardmäßig cosine similarity verwenden
-            if metadata is None:
-                metadata = {"hnsw:space": "cosine"}
-
-            self.client.create_collection(
+            return self.client.get_or_create_collection(
                 name=collection_name,
-                metadata=metadata
+                metadata={"hnsw:space": "cosine"}  # Empfohlen für Embeddings
             )
-            print(f"Collection '{collection_name}' erfolgreich erstellt")
-            return True
         except Exception as e:
-            print(f"Fehler beim Erstellen der Collection '{collection_name}': {e}")
-            return False
-
-    def get_collection(self, collection_name: str):
-        """
-        Ruft eine Collection ab
-
-        Args:
-            collection_name: Name der Collection
-
-        Returns:
-            Collection Objekt oder None
-        """
-        if not self.client:
+            print(f"Fehler beim Erstellen oder Abrufen der Collection '{collection_name}': {e}")
             return None
+
+    def add_documents(self, collection_name: str, documents: List[str], metadatas: List[Dict] = None, ids: List[str] = None):
+        """Fügt Dokumente zu einer Collection hinzu"""
+        collection = self.get_or_create_collection(collection_name)
+        if collection is None:
+            return
+
+        if ids is None:
+            ids = [f"doc_{i}" for i in range(len(documents))]
 
         try:
-            return self.client.get_collection(name=collection_name)
+            collection.add(
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
         except Exception as e:
-            print(f"Collection '{collection_name}' existiert nicht oder Fehler: {e}")
-            return None
+            print(f"Fehler beim Hinzufügen von Dokumenten zur Collection '{collection_name}': {e}")
 
     def add_embeddings(self, collection_name: str, embeddings: List[List[float]],
-                      documents: List[str], metadatas: Optional[List[Dict[str, Any]]] = None,
-                      ids: Optional[List[str]] = None) -> bool:
-        """
-        Fügt Embeddings zu einer Collection hinzu
-
-        Args:
-            collection_name: Name der Collection
-            embeddings: Liste von Embedding-Vektoren
-            documents: Liste von Dokumenten (Texten)
-            metadatas: Optionale Liste von Metadaten
-            ids: Optionale Liste von IDs (werden automatisch generiert wenn nicht angegeben)
-
-        Returns:
-            True wenn erfolgreich, False sonst
-        """
-        if not self.client:
-            print("ChromaDB Client nicht initialisiert")
+                      documents: List[str] = None, metadatas: List[Dict] = None,
+                      ids: List[str] = None):
+        """Fügt Embeddings zu einer Collection hinzu"""
+        collection = self.get_or_create_collection(collection_name)
+        if collection is None:
+            print(f"Konnte Collection '{collection_name}' nicht erstellen/abrufen")
             return False
 
+        if ids is None:
+            ids = [f"emb_{i}" for i in range(len(embeddings))]
+
         try:
-            # Prüfe, ob Collection existiert
-            collection = self.get_collection(collection_name)
-            if not collection:
-                print(f"Collection '{collection_name}' existiert nicht. Erstelle sie zuerst...")
-                if not self.create_collection(collection_name):
-                    return False
-                collection = self.get_collection(collection_name)
-
-            # Generiere IDs wenn nicht angegeben
-            if ids is None:
-                import uuid
-                ids = [str(uuid.uuid4()) for _ in range(len(embeddings))]
-
-            # Füge Embeddings hinzu
             collection.add(
                 embeddings=embeddings,
                 documents=documents,
                 metadatas=metadatas,
                 ids=ids
             )
-            print(f"✅ {len(embeddings)} Embeddings erfolgreich zur Collection '{collection_name}' hinzugefügt")
             return True
         except Exception as e:
-            print(f"Fehler beim Hinzufügen der Embeddings: {e}")
+            print(f"Fehler beim Hinzufügen von Embeddings zur Collection '{collection_name}': {e}")
             return False
 
-    def query_collection(self, collection_name: str, query_embeddings: Optional[List[List[float]]] = None,
-                        query_texts: Optional[List[str]] = None, n_results: int = 10,
-                        auto_create: bool = True, query: Optional[str] = None, **kwargs) -> Dict[str, Any]:
-        """
-        Führt eine Abfrage in der Collection durch
-
-        Args:
-            collection_name: Name der Collection
-            query_embeddings: Embedding-Vektoren für die Abfrage
-            query_texts: Texte für die Abfrage (wenn keine Embeddings angegeben)
-            query: DEPRECATED - Verwende query_texts stattdessen (für Rückwärtskompatibilität)
-            n_results: Anzahl der Ergebnisse
-            auto_create: Collection erstellen falls sie nicht existiert
-
-        Returns:
-            Dictionary mit Ergebnissen oder leeres Dict bei Fehler
-        """
-        # Rückwärtskompatibilität: query -> query_texts
-        if query is not None and query_texts is None:
-            query_texts = [query] if isinstance(query, str) else query
-
-        if not self.client:
-            print("ChromaDB Client nicht initialisiert")
-            return {}
-
+    def create_collection(self, collection_name: str) -> bool:
+        """Erstellt eine neue Collection"""
         try:
-            # Prüfe, ob Collection existiert
-            collection = self.get_collection(collection_name)
-            if not collection:
-                if auto_create:
-                    print(f"Collection '{collection_name}' existiert nicht, wird erstellt...")
-                    if self.create_collection(collection_name):
-                        collection = self.get_collection(collection_name)
-                        print(f"Collection '{collection_name}' erfolgreich erstellt für Abfrage.")
-                    else:
-                        print(f"Konnte Collection '{collection_name}' nicht erstellen.")
-                        return {}
-                else:
-                    print(f"Collection '{collection_name}' existiert nicht.")
-                    return {}
+            collection = self.client.create_collection(name=collection_name)
+            return collection is not None
+        except Exception as e:
+            if "already exists" in str(e).lower():
+                # Wenn die Collection bereits existiert, ist das kein Fehler
+                return True
+            print(f"Fehler beim Erstellen der Collection '{collection_name}': {e}")
+            return False
 
-            # Führe Query aus
-            results = collection.query(
-                query_embeddings=query_embeddings,
-                query_texts=query_texts,
+    def query(self, collection_name: str, query_text: str, n_results: int = 5):
+        """Sucht in einer Collection"""
+        collection = self.get_or_create_collection(collection_name)
+        if collection is None:
+            return None
+            
+        try:
+            return collection.query(
+                query_texts=[query_text],
                 n_results=n_results
             )
-            return results
         except Exception as e:
-            print(f"Fehler bei der Abfrage: {e}")
-            return {}
+            print(f"Fehler bei der Abfrage der Collection '{collection_name}': {e}")
+            return None
 
-    def list_collections(self) -> List[Dict[str, Any]]:
-        """
-        Listet alle Collections auf
-
-        Returns:
-            Liste von Dictionaries mit Collection-Informationen
-        """
-        if not self.client:
+    def get_collections(self):
+        """Gibt alle vorhandenen Collections zurück"""
+        if self.client is None:
             print("ChromaDB Client nicht initialisiert")
             return []
-
         try:
-            collections = self.client.list_collections()
-            # Konvertiere zu Dictionary-Format für Kompatibilität
-            return [{"name": col.name, "metadata": col.metadata} for col in collections]
+            return self.client.list_collections()
         except Exception as e:
-            print(f"Fehler bei der Auflistung der Collections: {e}")
+            print(f"Fehler beim Abrufen der Collections: {e}")
             return []
 
-    def delete_collection(self, collection_name: str) -> bool:
-        """
-        Löscht eine Collection
-
-        Args:
-            collection_name: Name der Collection
-
-        Returns:
-            True wenn erfolgreich, False sonst
-        """
-        if not self.client:
-            print("ChromaDB Client nicht initialisiert")
-            return False
-
+    def get_collection_stats(self, collection_name: str):
+        """Gibt Statistiken zu einer spezifischen Collection zurück"""
+        collection = self.get_or_create_collection(collection_name)
+        if collection is None:
+            return None
         try:
-            self.client.delete_collection(name=collection_name)
-            print(f"Collection '{collection_name}' erfolgreich gelöscht")
-            return True
+            return collection.count()
         except Exception as e:
-            print(f"Fehler beim Löschen der Collection '{collection_name}': {e}")
-            return False
+            print(f"Fehler beim Abrufen der Collection-Statistik: {e}")
+            return None
