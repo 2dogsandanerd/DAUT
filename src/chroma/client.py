@@ -2,10 +2,12 @@ import chromadb
 from chromadb.config import Settings
 from typing import List, Dict, Optional
 import requests
+import os
+from pathlib import Path
 
 
 class ChromaDBClient:
-    def __init__(self, host: str = "localhost", port: int = 8000, timeout: int = 30):
+    def __init__(self, host: str = "localhost", port: int = 8000, timeout: int = 30, persist_directory: Optional[str] = None):
         """
         Initialisiert den ChromaDB Client mit dem offiziellen Python Client.
 
@@ -13,30 +15,54 @@ class ChromaDBClient:
             host: Hostname des ChromaDB Servers
             port: Port des ChromaDB Servers
             timeout: Timeout für Verbindungen
+            persist_directory: Optionaler Pfad für persistente Speicherung (wenn lokal verwendet)
         """
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.persist_directory = persist_directory or "./chromadb_data"
         self.base_url = f"http://{host}:{port}/api/v2"
 
+        # Versuche zuerst lokale persistente Speicherung, falls Host=localhost
+        if host == "localhost" or host == "127.0.0.1":
+            try:
+                # Stelle sicher, dass das Persistenz-Verzeichnis existiert
+                persist_path = Path(self.persist_directory)
+                persist_path.mkdir(parents=True, exist_ok=True)
+
+                # Versuche, einen PersistentClient zu erstellen
+                self.client = chromadb.PersistentClient(
+                    path=str(persist_path),
+                    settings=Settings(anonymized_telemetry=False)
+                )
+                print(f"✅ Verwende lokale persistente ChromaDB in: {self.persist_directory}")
+            except Exception as e:
+                print(f"⚠️ Lokale persistente ChromaDB nicht verfügbar: {e}, versuche HTTP-Verbindung...")
+                self._try_http_connection()
+        else:
+            # Für entfernte Server verwende HTTP-Client
+            self._try_http_connection()
+
+    def _try_http_connection(self):
+        """Versucht, eine Verbindung zu einem HTTP-ChromaDB-Server herzustellen"""
         try:
-            # Versuche, die Verbindung über HTTP zu testen
-            response = requests.get(f"{self.base_url}/heartbeat", timeout=timeout)
+            response = requests.get(f"{self.base_url}/heartbeat", timeout=self.timeout)
             if response.status_code == 200:
                 # Verwende den offiziellen ChromaDB HttpClient
                 self.client = chromadb.HttpClient(
-                    host=host,
-                    port=port,
+                    host=self.host,
+                    port=self.port,
                     settings=Settings(
-                        chroma_server_host=host,
-                        chroma_server_http_port=port,
+                        chroma_server_host=self.host,
+                        chroma_server_http_port=self.port,
                         chroma_server_ssl_enabled=False
                     )
                 )
+                print(f"✅ Verbinde mit ChromaDB-Server unter: {self.host}:{self.port}")
             else:
                 raise Exception(f"Unerwarteter Statuscode: {response.status_code}")
         except Exception as e:
-            print(f"Warnung: Konnte nicht zum ChromaDB Server verbinden: {e}")
+            print(f"❌ Konnte nicht zum ChromaDB Server verbinden: {e}")
             self.client = None
 
     def is_connected(self) -> bool:
@@ -54,11 +80,17 @@ class ChromaDBClient:
         if self.client is None:
             return False
         try:
-            # Nutze die direkte HTTP-Anfrage anstatt des Clients
-            response = requests.get(f"{self.base_url}/heartbeat", timeout=self.timeout)
-            return response.status_code == 200
+            # Für PersistentClient gibt es keine HTTP-Heartbeat-Prüfung
+            # Stattdessen versuchen wir, eine einfache Operation auszuführen
+            self.client.heartbeat()
+            return True
         except:
-            return False
+            # Als Fallback versuchen wir die HTTP-Methode
+            try:
+                response = requests.get(f"{self.base_url}/heartbeat", timeout=self.timeout)
+                return response.status_code == 200
+            except:
+                return False
 
     def get_or_create_collection(self, collection_name: str):
         """Holt oder erstellt eine Collection"""
@@ -154,6 +186,10 @@ class ChromaDBClient:
             print(f"Fehler beim Abrufen der Collections: {e}")
             return []
 
+    def list_collections(self):
+        """Alias für get_collections - gibt alle vorhandenen Collections zurück"""
+        return self.get_collections()
+
     def get_collection_stats(self, collection_name: str):
         """Gibt Statistiken zu einer spezifischen Collection zurück"""
         collection = self.get_or_create_collection(collection_name)
@@ -164,3 +200,41 @@ class ChromaDBClient:
         except Exception as e:
             print(f"Fehler beim Abrufen der Collection-Statistik: {e}")
             return None
+
+    def get_collection(self, collection_name: str):
+        """Gibt eine Collection zurück oder None wenn sie nicht existiert"""
+        try:
+            if self.client is None:
+                print("ChromaDB Client nicht initialisiert")
+                return None
+
+            collections = self.list_collections()
+            collection_names = [c.name for c in collections]
+
+            if collection_name not in collection_names:
+                return None
+
+            return self.client.get_collection(name=collection_name)
+        except Exception as e:
+            print(f"Fehler beim Abrufen der Collection '{collection_name}': {e}")
+            return None
+
+    def delete_collection(self, collection_name: str) -> bool:
+        """Löscht eine Collection"""
+        try:
+            if self.client is None:
+                print("ChromaDB Client nicht initialisiert")
+                return False
+
+            collections = self.list_collections()
+            collection_names = [c.name for c in collections]
+
+            if collection_name not in collection_names:
+                print(f"Collection '{collection_name}' existiert nicht")
+                return True
+
+            self.client.delete_collection(name=collection_name)
+            return True
+        except Exception as e:
+            print(f"Fehler beim Löschen der Collection '{collection_name}': {e}")
+            return False

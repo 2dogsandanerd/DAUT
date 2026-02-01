@@ -7,10 +7,11 @@ class ServiceConfig(BaseModel):
     ollama_host: str = "http://localhost:11434"
     chroma_host: str = "localhost"
     chroma_port: int = 8000
+    chroma_persist_directory: str = "./chromadb_data"
     ollama_timeout: int = 120
     chroma_timeout: int = 30
-    embedding_model: str = "nomic-embed-text"
-    llm_model: str = "llama3"
+    embedding_model: str = "nomic-embed-text:latest"
+    llm_model: str = "llama3.1:8b-instruct-q4_k_m"
     
     def save_to_file(self, file_path: str):
         """Speichert die Konfiguration in eine Datei"""

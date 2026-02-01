@@ -158,7 +158,7 @@ class GitIgnoreHandler:
         
         # Wandele .gitignore-Symbole zurück
         # ** -> .*
-        regex = regex.replace('\\*\\*\\/', '.*\/')
+        regex = regex.replace('\\*\\*\\/', '.*(\\\\|/)')  # Erlaubt beliebige Anzahl von Verzeichnissen
         regex = regex.replace('\\*\\*', '.*')
         
         # * -> [^/]* (beliebige Zeichen außer Schrägstrich)

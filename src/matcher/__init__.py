@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from src.models.element import CodeElement, DocElement
-from src.matcher.advanced_matcher import AdvancedMatcherEngine
+from .advanced_matcher import AdvancedMatcherEngine
 
 class MatcherEngine:
     def __init__(self):

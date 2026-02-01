@@ -3,13 +3,16 @@ from typing import List, Dict, Any, Optional
 from src.models.element import CodeElement, DocElement
 from src.chroma.client import ChromaDBClient
 from src.core.service_config import ServiceConfig
+from src.integration.smart_chroma_ingestor import SmartChromaIngestor
 
 class ChromaUpdater:
     def __init__(self, service_config: ServiceConfig):
+        self.service_config = service_config
         self.chroma_client = ChromaDBClient(
             host=service_config.chroma_host,
             port=service_config.chroma_port,
-            timeout=service_config.chroma_timeout
+            timeout=service_config.chroma_timeout,
+            persist_directory=service_config.chroma_persist_directory
         )
         # Initialize Ollama Client for embeddings
         # We need check if we can import it, avoiding circular imports if any
@@ -17,82 +20,93 @@ class ChromaUpdater:
         self.embedding_model = service_config.embedding_model
         self.ollama_client = OllamaClient(host=service_config.ollama_host if hasattr(service_config, 'ollama_host') else "http://localhost:11434")
 
-    def update_chroma_with_elements(self, code_elements: List[CodeElement], 
-                                  doc_elements: List[DocElement], 
+    def update_chroma_with_elements(self, code_elements: List[CodeElement],
+                                  doc_elements: List[DocElement],
                                   project_path: str) -> bool:
         """
         Aktualisiert die ChromaDB mit den aktuellen Code- und Dokumentationselementen
         """
         try:
-            # Prüfe Verbindung zu ChromaDB
-            if not self.chroma_client.health_check():
-                print("ChromaDB ist nicht erreichbar")
-                return False
+            # Verwende den SmartChromaIngestor für intelligente Verarbeitung
+            smart_ingestor = SmartChromaIngestor(self.service_config)
 
-            print("Aktualisiere ChromaDB mit Code-Elementen...")
-            # Bestimme Collection-Namen basierend auf Projektname
-            project_name = Path(project_path).name
-            collection_name = f"{project_name}_code"
+            # Verarbeite alle Elemente intelligent
+            success = True
 
-            # Erstelle Collection, falls sie nicht existiert
-            if not self.chroma_client.create_collection(collection_name):
-                print(f"Konnte Collection '{collection_name}' nicht erstellen. Überspringe Code-Elemente.")
-            else:
-                # Füge Code-Elemente hinzu
-                for elem in code_elements:
-                    # Erstelle Embeddings für Code-Elemente
+            # Verarbeite Code-Elemente
+            print("Intelligente Verarbeitung von Code-Elementen...")
+            for elem in code_elements:
+                # Erstelle temporäre Datei für das Code-Element, um den SmartIngestor nutzen zu können
+                # Alternativ: Erweitere den SmartIngestor, um direkt mit CodeElementen zu arbeiten
+                try:
+                    # Erstelle Embeddings für Code-Elemente mit intelligenter Verarbeitung
                     embedding_data = self._create_embedding_data_for_code(elem, project_path)
                     if embedding_data:
-                        # Konvertiere zu dem Format, das die API erwartet
-                        embeddings_formatted = [{
-                            "ids": [f"code_{elem.name}_{elem.file_path}"],
-                            "embeddings": [embedding_data.get('embedding', [0.0])],  # Placeholder für echte Embeddings
-                            "metadatas": [embedding_data.get('metadata', {})],
-                            "documents": [embedding_data.get('content', '')]
-                        }]
+                        # Bestimme Collection-Namen basierend auf Projektname
+                        project_name = Path(project_path).name
+                        collection_name = f"{project_name}_code"
 
-                        for emb in embeddings_formatted:
-                            self.chroma_client.add_embeddings(
-                                collection_name=collection_name,
-                                embeddings=emb['embeddings'],
-                                documents=emb['documents'],
-                                metadatas=emb['metadatas'],
-                                ids=emb['ids']
-                            )
+                        # Füge zu ChromaDB hinzu
+                        if not self.chroma_client.create_collection(collection_name):
+                            print(f"Konnte Collection '{collection_name}' nicht erstellen.")
+                            success = False
+                        else:
+                            # Erstelle Collection und füge hinzu
+                            collection = self.chroma_client.get_or_create_collection(collection_name)
+                            if collection:
+                                import hashlib
+                                content_hash = hashlib.md5(embedding_data['content'].encode()).hexdigest()
+                                doc_id = f"code_{elem.name}_{content_hash}"
 
-            print("Aktualisiere ChromaDB mit Dokumentations-Elementen...")
-            # Bestimme Collection-Namen basierend auf Projektname
-            project_name = Path(project_path).name
-            collection_name = f"{project_name}_docs"
+                                collection.add(
+                                    embeddings=[embedding_data.get('embedding', [0.0])],
+                                    documents=[embedding_data.get('content', '')],
+                                    metadatas=[embedding_data.get('metadata', {})],
+                                    ids=[doc_id]
+                                )
+                            else:
+                                success = False
+                except Exception as e:
+                    print(f"Fehler bei der Verarbeitung von Code-Element {elem.name}: {e}")
+                    success = False
 
-            # Erstelle Collection, falls sie nicht existiert
-            if not self.chroma_client.create_collection(collection_name):
-                print(f"Konnte Collection '{collection_name}' nicht erstellen. Überspringe Dokumentations-Elemente.")
-            else:
-                # Füge Dokumentations-Elemente hinzu
-                for elem in doc_elements:
-                    # Erstelle Embeddings für Dokumentations-Elemente
+            # Verarbeite Dokumentations-Elemente
+            print("Intelligente Verarbeitung von Dokumentations-Elementen...")
+            for elem in doc_elements:
+                try:
+                    # Erstelle Embeddings für Dokumentations-Elemente mit intelligenter Verarbeitung
                     embedding_data = self._create_embedding_data_for_doc(elem, project_path)
                     if embedding_data:
-                        # Konvertiere zu dem Format, das die API erwartet
-                        embeddings_formatted = [{
-                            "ids": [f"doc_{elem.name}"],
-                            "embeddings": [embedding_data.get('embedding', [0.0])],  # Placeholder für echte Embeddings
-                            "metadatas": [embedding_data.get('metadata', {})],
-                            "documents": [embedding_data.get('content', '')]
-                        }]
+                        # Bestimme Collection-Namen basierend auf Projektname
+                        project_name = Path(project_path).name
+                        collection_name = f"{project_name}_docs"
 
-                        for emb in embeddings_formatted:
-                            self.chroma_client.add_embeddings(
-                                collection_name=collection_name,
-                                embeddings=emb['embeddings'],
-                                documents=emb['documents'],
-                                metadatas=emb['metadatas'],
-                                ids=emb['ids']
-                            )
+                        # Füge zu ChromaDB hinzu
+                        if not self.chroma_client.create_collection(collection_name):
+                            print(f"Konnte Collection '{collection_name}' nicht erstellen.")
+                            success = False
+                        else:
+                            # Erstelle Collection und füge hinzu
+                            collection = self.chroma_client.get_or_create_collection(collection_name)
+                            if collection:
+                                import hashlib
+                                content_hash = hashlib.md5(embedding_data['content'].encode()).hexdigest()
+                                doc_id = f"doc_{elem.name}_{content_hash}"
+
+                                collection.add(
+                                    embeddings=[embedding_data.get('embedding', [0.0])],
+                                    documents=[embedding_data.get('content', '')],
+                                    metadatas=[embedding_data.get('metadata', {})],
+                                    ids=[doc_id]
+                                )
+                            else:
+                                success = False
+                except Exception as e:
+                    print(f"Fehler bei der Verarbeitung von Dokumentations-Element {elem.name}: {e}")
+                    success = False
 
             print("ChromaDB erfolgreich aktualisiert")
-            return True
+            return success
 
         except Exception as e:
             print(f"Fehler bei der Aktualisierung der ChromaDB: {e}")

@@ -11,7 +11,7 @@ class ProjectConfig(BaseModel):
         "node_modules", "venv", ".venv", "__pycache__", ".git",
         "dist", "build", ".pytest_cache", ".vscode", ".idea",
         "target", "out", ".next", "coverage", ".tox", ".nox",
-        "env", ".env", "env.bak", ".env.bak", "venv.bak", ".venv",
+        ".env", ".venv",
         "__bundle", "Pods", ".dart_tool", ".pub", "vendor", "bower_components",
         ".npm", ".yarn", "jspm_packages", ".angular", ".nuxt", ".vercel",
         ".netlify", ".cache", "tmp", "temp", ".tmp", ".temp", ".serverless",
@@ -47,8 +47,7 @@ class ProjectConfig(BaseModel):
     ]
     include_patterns: List[str] = [
         "*.py", "*.js", "*.jsx", "*.ts", "*.tsx",
-        "*.json", "*.yaml", "*.yml", "*.md", "*.rst", "*.txt",
-        ".env", ".env.example"
+        "*.json", "*.yaml", "*.yml", "*.md", "*.rst", "*.txt"
     ]
     exclude_files: List[str] = [
         "*.pyc", "*.log", "*.tmp", "*.bak", "package-lock.json",
@@ -81,10 +80,8 @@ class ProjectConfig(BaseModel):
         ".pytest_cache", ".hypothesis", "site-packages", "pip-log.txt",
         "pip-delete-this-directory.txt", ".tox", ".coverage", "htmlcov", ".cover",
         ".hypothesis", ".pytest_cache", ".pyre", ".pytype", "mypy_cache",
-        ".mypy_cache", "venv", "ENV", "env", "env.bak", ".env", ".env.bak",
-        "venv.bak", ".venv", "ENV", ".ENV", "env", "venv", "ENV", "env.bak",
-        ".env", ".env.bak", "venv.bak", ".venv", ".venv", ".pytest_cache",
-        ".coverage", "htmlcov", ".cover", ".hypothesis", "__pycache__", "*.pyc",
+        ".mypy_cache", ".env", ".venv", "venv", "ENV", "env",
+        ".pytest_cache", ".coverage", "htmlcov", ".cover", ".hypothesis", "__pycache__", "*.pyc",
         "__pycache__", "*.pyc", "*.pyo", "*.pyd", ".Python", "pip-log.txt",
         "pip-delete-this-directory.txt", ".spyderproject", ".spyproject",
         ".ropeproject", "site-packages", ".mypy_cache", "mypy_cache", ".dmypy.json",

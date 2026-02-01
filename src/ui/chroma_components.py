@@ -17,7 +17,8 @@ def display_chroma_status(service_config: ServiceConfig = None, chroma_client=No
         chroma_client = ChromaDBClient(
             host=service_config.chroma_host,
             port=service_config.chroma_port,
-            timeout=service_config.chroma_timeout
+            timeout=service_config.chroma_timeout,
+            persist_directory=service_config.chroma_persist_directory
         )
 
     if chroma_client.health_check():
@@ -43,7 +44,8 @@ def display_chroma_collection_management(service_config: ServiceConfig = None, c
         chroma_client = ChromaDBClient(
             host=service_config.chroma_host,
             port=service_config.chroma_port,
-            timeout=service_config.chroma_timeout
+            timeout=service_config.chroma_timeout,
+            persist_directory=service_config.chroma_persist_directory
         )
 
     # Prüfe Verbindung
@@ -61,23 +63,19 @@ def display_chroma_collection_management(service_config: ServiceConfig = None, c
 
         if collections:
             for collection in collections:
-                col_name = collection.get('name', 'Unbekannt') if isinstance(collection, dict) else str(collection)
-                col_items = collection.get('count', 'Unbekannt') if isinstance(collection, dict) else 'Unbekannt'
+                col_name = collection.name if hasattr(collection, 'name') else str(collection)
+                col_items = collection.count() if hasattr(collection, 'count') else 'Unbekannt'
 
                 col_disp1, col_disp2 = st.columns([3, 1])
                 with col_disp1:
                     st.write(f"**{col_name}** ({col_items} Items)" if col_items != 'Unbekannt' else f"**{col_name}**")
                 with col_disp2:
                     if st.button("🗑️ Löschen", key=f"del_{col_name}"):
-                        try:
-                            # Lösche Collection
-                            if chroma_client.delete_collection(col_name):
-                                st.success(f"Collection '{col_name}' erfolgreich gelöscht")
-                                st.rerun()
-                            else:
-                                st.error(f"Fehler beim Löschen der Collection '{col_name}'")
-                        except Exception as e:
-                            st.error(f"Fehler beim Löschen der Collection: {e}")
+                        if chroma_client.delete_collection(col_name):
+                            st.success(f"Collection '{col_name}' erfolgreich gelöscht")
+                            st.rerun()
+                        else:
+                            st.error(f"Fehler beim Löschen der Collection '{col_name}'")
         else:
             st.info("Keine Collections vorhanden")
 
@@ -105,7 +103,7 @@ def display_chroma_collection_management(service_config: ServiceConfig = None, c
         # Bereite Liste für Dropdown vor
         collection_names = []
         if collections:
-            collection_names = [c.get('name') if isinstance(c, dict) else str(c) for c in collections]
+            collection_names = [c.name if hasattr(c, 'name') else str(c) for c in collections]
             
         if collection_names:
             collection_detail_name = st.selectbox("Wähle Collection für Details", options=collection_names)

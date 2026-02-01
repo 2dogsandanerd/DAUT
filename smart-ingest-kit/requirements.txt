@@ -1,0 +1,4 @@
+docling
+pydantic
+loguru
+llama-index-core  # Optional, but good for typing

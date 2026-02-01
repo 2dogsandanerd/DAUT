@@ -2,6 +2,7 @@
   "ollama_host": "http://localhost:11434",
   "chroma_host": "localhost",
   "chroma_port": 8000,
+  "chroma_persist_directory": "/mnt/dev/eingang/rag_enterprise_core/docs/chroma_db",
   "ollama_timeout": 120,
   "chroma_timeout": 30,
   "embedding_model": "nomic-embed-text",

@@ -24,7 +24,7 @@ DAUT scans your codebase, detects undocumented code, and automatically generates
 DAUT uses a sophisticated **structural indexing approach** to ensure high-quality answers:
 
 1.  **Unified Knowledge Base** 🌐
-    All files, regardless of their folder depth, are indexed into a single project-wide collection (e.g., `rag_enterprise_core_code`). This prevents context fragmentation and ensures the AI sees the "Big Picture".
+    All files, regardless of their folder depth, are indexed into a single project-wide collection (e.g., `daut_code`). This prevents context fragmentation and ensures the AI sees the "Big Picture".
 
 2.  **Full-Content Embedding** 📖
     Unlike simple splitters that chop text into arbitrary chunks, DAUT indexes the **full content** of your documentation files. This preserves the complete context of tutorials and guides.
@@ -259,6 +259,8 @@ The server requires an **API Key** for all requests. You **MUST** configure this
 
 Contributions welcome! This project is under active development.
 
+For enterprise-grade RAG solutions, check out our advanced framework: [RAG Enterprise Core v4](https://github.com/2dogsandanerd/rag_enterprise_core_v4)
+
 ## 📄 License
 
 MIT License - see LICENSE file for details
@@ -283,6 +285,10 @@ All core features implemented:
 ## 📞 Support
 
 Found a bug or have a feature request? Open an issue!
+
+For additional support or enterprise inquiries, contact us at: 2dogsandanerd@gmail.com
+
+For more advanced RAG implementations, visit: [RAG Enterprise Core v4](https://github.com/2dogsandanerd/rag_enterprise_core_v4)
 
 ---
 

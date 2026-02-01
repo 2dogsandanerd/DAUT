@@ -32,8 +32,12 @@ def main():
         st.session_state.chroma_client = ChromaDBClient(
             host=service_config.chroma_host,
             port=service_config.chroma_port,
-            timeout=service_config.chroma_timeout
+            timeout=service_config.chroma_timeout,
+            persist_directory=service_config.chroma_persist_directory
         )
+    if 'service_config' not in st.session_state:
+        from src.core.service_config import ServiceConfig
+        st.session_state.service_config = ServiceConfig()
     
     # Sidebar für Konfiguration
     with st.sidebar:
@@ -407,10 +411,42 @@ def main():
     with st.expander("Filter-Verwaltung"):
         display_filter_management(st.session_state.config)
 
+    # ChromaDB-Konfiguration und -Management
+    with st.expander("ChromaDB-Konfiguration"):
+        st.subheader("Speicherort-Einstellungen")
+
+        current_persist_dir = st.session_state.service_config.chroma_persist_directory
+        new_persist_dir = st.text_input(
+            "ChromaDB Speicherort",
+            value=current_persist_dir,
+            help="Pfad zum ChromaDB Speicherverzeichnis. Kann relativ (./chromadb_data) oder absolut (/mnt/data/chroma) sein."
+        )
+
+        if st.button("Speicherort aktualisieren"):
+            if new_persist_dir != current_persist_dir:
+                st.session_state.service_config.chroma_persist_directory = new_persist_dir
+                st.session_state.service_config.save_to_file('src/service_config.json')
+
+                from src.chroma.client import ChromaDBClient
+                st.session_state.chroma_client = ChromaDBClient(
+                    host=st.session_state.service_config.chroma_host,
+                    port=st.session_state.service_config.chroma_port,
+                    timeout=st.session_state.service_config.chroma_timeout,
+                    persist_directory=new_persist_dir
+                )
+
+                st.success(f"Speicherort aktualisiert: {new_persist_dir}")
+                st.info("ChromaDB Client wurde neu initialisiert.")
+                st.rerun()
+            else:
+                st.info("Keine Änderung am Speicherort.")
+
+        st.info(f"Aktueller Speicherort: `{current_persist_dir}`")
+
     # ChromaDB-Status und -Management
     with st.expander("ChromaDB-Status und -Verwaltung"):
-        display_chroma_status(chroma_client=st.session_state.chroma_client)
-        display_chroma_collection_management(chroma_client=st.session_state.chroma_client)
+        display_chroma_status(service_config=st.session_state.service_config, chroma_client=st.session_state.chroma_client)
+        display_chroma_collection_management(service_config=st.session_state.service_config, chroma_client=st.session_state.chroma_client)
 
     # Export-Funktionalität und erweiterte Optionen
     if st.session_state.scan_results:
